@@ -174,7 +174,8 @@ namespace BIntangSyahriMahardika_Module2
         {
             if (dataGridView1.Columns[e.ColumnIndex].Name == "Aksi" && e.RowIndex >= 0)
             {
-                string aksi = dataGridView1.Rows[e.RowIndex].Cells["Aksi"].Value?.ToString();
+                object aksiValue = dataGridView1.Rows[e.RowIndex].Cells["Aksi"].Value;
+                string aksi = aksiValue == null ? string.Empty : aksiValue.ToString();
                 string sku = dataGridView1.Rows[e.RowIndex].Cells["SKU"].Value.ToString();
 
                 if (aksi == "Edit Product")

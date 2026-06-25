@@ -101,43 +101,113 @@ END;";
             {
                 connection.Open();
 
-                if (TableIsEmpty(connection, "dbo.users"))
-                {
-                    ExecuteNonQuery(connection, @"
-INSERT INTO dbo.users (username, password, full_name, role) VALUES
-('admin1', '0192023a7bbd73250516f069df18b500', 'Admin User', 'Admin'),
-('staff1', 'de9bf5643eabf80f4a56fda3bbb84483', 'Staff User', 'Staff');");
-                }
+                EnsureUser(connection, "admin1", "0192023a7bbd73250516f069df18b500", "Admin User", "Admin");
+                EnsureUser(connection, "staff1", "de9bf5643eabf80f4a56fda3bbb84483", "Staff User", "Staff");
 
-                if (TableIsEmpty(connection, "dbo.categories"))
-                {
-                    ExecuteNonQuery(connection, @"
-INSERT INTO dbo.categories (name_category) VALUES
-('Electronics'),
-('Packaging'),
-('Warehouse Tools'),
-('Office Supplies');");
-                }
+                EnsureCategory(connection, "Electronics");
+                EnsureCategory(connection, "Packaging");
+                EnsureCategory(connection, "Warehouse Tools");
+                EnsureCategory(connection, "Office Supplies");
 
-                if (TableIsEmpty(connection, "dbo.products"))
-                {
-                    ExecuteNonQuery(connection, @"
-INSERT INTO dbo.products (sku, name_product, description, image, id_category, price, stock, min_threshold) VALUES
-('SKU-1001', 'Industrial Tablet X5', 'Ruggedized Series', 'tablet-x5.png', 1, 12500000, 42, 10),
-('SKU-1002', 'Bubble Wrap Roll 100m', 'Standard Shipping', 'bubble-wrap.png', 2, 450000, 12, 15),
-('SKU-1003', 'Digital Caliper Pro', 'Precision Instruments', 'caliper.png', 3, 2100000, 156, 20),
-('SKU-1004', 'Thermal Label Printer', 'Logistics Series', 'printer.png', 1, 3750000, 0, 10),
-('SKU-1005', 'Pallet Jack Heavy', 'Load Capacity 2.5T', 'pallet-jack.png', 3, 4200000, 8, 5),
-('SKU-1006', 'Cardboard Box A4', 'Bulk Pack (50pcs)', 'box-a4.png', 2, 125000, 540, 50);");
-                }
+                EnsureProduct(connection, "SKU-1001", "Industrial Tablet X5", "Ruggedized Series", "tablet-x5.png", "Electronics", 12500000, 42, 10);
+                EnsureProduct(connection, "SKU-1002", "Bubble Wrap Roll 100m", "Standard Shipping", "bubble-wrap.png", "Packaging", 450000, 12, 15);
+                EnsureProduct(connection, "SKU-1003", "Digital Caliper Pro", "Precision Instruments", "caliper.png", "Warehouse Tools", 2100000, 156, 20);
+                EnsureProduct(connection, "SKU-1004", "Thermal Label Printer", "Logistics Series", "printer.png", "Electronics", 3750000, 0, 10);
+                EnsureProduct(connection, "SKU-1005", "Pallet Jack Heavy", "Load Capacity 2.5T", "pallet-jack.png", "Warehouse Tools", 4200000, 8, 5);
+                EnsureProduct(connection, "SKU-1006", "Cardboard Box A4", "Bulk Pack (50pcs)", "box-a4.png", "Packaging", 125000, 540, 50);
             }
+        }
+
+        private static void EnsureUser(SqlConnection connection, string username, string password, string fullName, string role)
+        {
+            if (RecordExists(connection, "dbo.users", "username", username))
+            {
+                return;
+            }
+
+            ExecuteNonQuery(connection, string.Format(
+                "INSERT INTO dbo.users (username, password, full_name, role) VALUES ('{0}', '{1}', '{2}', '{3}')",
+                EscapeSql(username),
+                EscapeSql(password),
+                EscapeSql(fullName),
+                EscapeSql(role)));
+        }
+
+        private static void EnsureCategory(SqlConnection connection, string categoryName)
+        {
+            if (RecordExists(connection, "dbo.categories", "name_category", categoryName))
+            {
+                return;
+            }
+
+            ExecuteNonQuery(connection, string.Format(
+                "INSERT INTO dbo.categories (name_category) VALUES ('{0}')",
+                EscapeSql(categoryName)));
+        }
+
+        private static void EnsureProduct(SqlConnection connection, string sku, string name, string description, string image, string categoryName, decimal price, int stock, int minThreshold)
+        {
+            if (RecordExists(connection, "dbo.products", "sku", sku))
+            {
+                return;
+            }
+
+            int categoryId = GetCategoryId(connection, categoryName);
+            if (categoryId <= 0)
+            {
+                throw new InvalidOperationException("Kategori tidak ditemukan untuk seed produk: " + categoryName);
+            }
+
+            ExecuteNonQuery(connection, string.Format(
+                "INSERT INTO dbo.products (sku, name_product, description, image, id_category, price, stock, min_threshold) VALUES ('{0}', '{1}', '{2}', '{3}', {4}, {5}, {6}, {7})",
+                EscapeSql(sku),
+                EscapeSql(name),
+                EscapeSql(description),
+                EscapeSql(image),
+                categoryId,
+                price.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                stock,
+                minThreshold));
+        }
+
+        private static int GetCategoryId(SqlConnection connection, string categoryName)
+        {
+            using (SqlCommand command = connection.CreateCommand())
+            {
+                command.CommandText = "SELECT TOP 1 id_category FROM dbo.categories WHERE name_category = @name";
+                command.Parameters.AddWithValue("@name", categoryName);
+                object result = command.ExecuteScalar();
+                if (result == null || result == DBNull.Value)
+                {
+                    return 0;
+                }
+                return Convert.ToInt32(result);
+            }
+        }
+
+        private static bool RecordExists(SqlConnection connection, string tableName, string columnName, string value)
+        {
+            using (SqlCommand command = connection.CreateCommand())
+            {
+                command.CommandText = string.Format(
+                    "SELECT CASE WHEN EXISTS (SELECT 1 FROM {0} WHERE {1} = @value) THEN 1 ELSE 0 END",
+                    tableName,
+                    columnName);
+                command.Parameters.AddWithValue("@value", value);
+                return Convert.ToInt32(command.ExecuteScalar()) == 1;
+            }
+        }
+
+        private static string EscapeSql(string value)
+        {
+            return value.Replace("'", "''");
         }
 
         private static bool TableIsEmpty(SqlConnection connection, string tableName)
         {
             using (SqlCommand command = connection.CreateCommand())
             {
-                command.CommandText = $"SELECT CASE WHEN EXISTS (SELECT 1 FROM {tableName}) THEN 0 ELSE 1 END";
+                command.CommandText = string.Format("SELECT CASE WHEN EXISTS (SELECT 1 FROM {0}) THEN 0 ELSE 1 END", tableName);
                 return Convert.ToInt32(command.ExecuteScalar()) == 1;
             }
         }
