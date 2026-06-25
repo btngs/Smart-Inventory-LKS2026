@@ -16,6 +16,7 @@ namespace BIntangSyahriMahardika_Module2
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            DatabaseInitializer.Initialize();
             Application.Run(new LoginForm());
         }
     }
